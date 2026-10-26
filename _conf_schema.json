@@ -1,0 +1,326 @@
+{
+  "api": {
+    "description": "生图接口",
+    "type": "object",
+    "hint": "默认接口来自插件配置；也可在 /接口 中添加持久化的备用接口。",
+    "items": {
+      "enabled": {
+        "description": "启用默认接口",
+        "type": "bool",
+        "default": true,
+        "hint": "关闭后只使用 /接口 中添加并启用的备用接口。"
+      },
+      "base_url": {
+        "description": "接口地址",
+        "type": "string",
+        "default": "https://api1.weilai.chat/v1",
+        "hint": "OpenAI 兼容地址；插件会自动拼接 /images/generations 和 /images/edits。"
+      },
+      "model": {
+        "description": "模型名称",
+        "type": "string",
+        "default": "gpt-image-2"
+      },
+      "api_key": {
+        "description": "API Key",
+        "type": "string",
+        "default": "",
+        "secret": true,
+        "obvious_hint": true,
+        "hint": "仅在服务端配置和请求中使用，聊天回复和日志不会显示完整密钥。"
+      },
+      "timeout": {
+        "description": "请求超时（秒）",
+        "type": "float",
+        "default": 180,
+        "hint": "范围 10～600 秒。"
+      },
+      "max_retries": {
+        "description": "可重试错误的最大重试次数",
+        "type": "int",
+        "default": 2,
+        "hint": "范围 0～5；只对超时、连接错误、429 和 5xx 重试。"
+      },
+      "require_reference": {
+        "description": "必须提交参考图",
+        "type": "bool",
+        "default": false,
+        "hint": "开启后，没有任何可用参考图时直接报错，不会退化为纯文生图。"
+      },
+      "quality": {
+        "description": "图片质量",
+        "type": "string",
+        "options": ["auto", "low", "medium", "high"],
+        "default": "auto"
+      },
+      "output_format": {
+        "description": "输出格式",
+        "type": "string",
+        "options": ["png", "jpeg", "webp"],
+        "default": "png"
+      },
+      "edit_field": {
+        "description": "参考图 multipart 字段名",
+        "type": "string",
+        "default": "image[]",
+        "hint": "仅当兼容接口要求其他字段名时修改；不会发送不存在的 reference_weight 参数。"
+      },
+      "allow_private_download_urls": {
+        "description": "允许下载私网图片 URL",
+        "type": "bool",
+        "default": false,
+        "obvious_hint": true,
+        "hint": "默认禁止访问内网/本机地址，避免 SSRF。仅在完全可信的自建文件服务场景开启。"
+      }
+    }
+  },
+  "character": {
+    "description": "角色形象",
+    "type": "object",
+    "items": {
+      "name": {
+        "description": "角色名称",
+        "type": "string",
+        "default": "我",
+        "hint": "用于提示词和回复文案。"
+      },
+      "persona": {
+        "description": "角色设定",
+        "type": "text",
+        "default": "",
+        "hint": "只影响气质、表情和表达方式，不会覆盖安全规则。"
+      },
+      "style": {
+        "description": "默认画面风格",
+        "type": "string",
+        "default": "自然、真实、有生活感的人像照片",
+        "hint": "用户在描述中明确指定二次元、插画等风格时，会尊重用户风格并过滤冲突的负面词。"
+      }
+    }
+  },
+  "gallery": {
+    "description": "参考图库",
+    "type": "object",
+    "items": {
+      "allow_user_upload": {
+        "description": "允许普通用户修改个人图库",
+        "type": "bool",
+        "default": true,
+        "hint": "关闭后仅管理员可上传、改权重、删除参考图；仍可查看共享图库。"
+      },
+      "max_images_per_scope": {
+        "description": "每个数据空间的参考图上限",
+        "type": "int",
+        "default": 80,
+        "hint": "范围 1～1000。"
+      },
+      "max_image_mb": {
+        "description": "单张参考图大小上限（MB）",
+        "type": "int",
+        "default": 10,
+        "hint": "范围 1～50。会同时校验真实图片格式与像素规模。"
+      },
+      "allowed_formats": {
+        "description": "允许的图片格式",
+        "type": "string",
+        "default": "png,jpg,jpeg,webp",
+        "hint": "逗号分隔，仅支持 png、jpg、jpeg、webp。"
+      },
+      "upload_timeout": {
+        "description": "连续上传会话超时（秒）",
+        "type": "int",
+        "default": 120,
+        "hint": "范围 30～600。"
+      },
+      "upload_max_images": {
+        "description": "单次连续上传最多保存张数",
+        "type": "int",
+        "default": 10,
+        "hint": "范围 1～50。"
+      }
+    }
+  },
+  "wardrobe": {
+    "description": "智能衣柜",
+    "type": "object",
+    "items": {
+      "allow_user_edit": {
+        "description": "允许普通用户修改个人衣柜",
+        "type": "bool",
+        "default": true,
+        "hint": "关闭后仅管理员可添加、删除、穿戴或调整衣物；仍可查看自己的衣柜。"
+      },
+      "max_items": {
+        "description": "每个数据空间的衣物上限",
+        "type": "int",
+        "default": 200,
+        "hint": "范围 1～2000。基础白T恤和黑色短裤也会计入。"
+      }
+    }
+  },
+  "generation": {
+    "description": "生图行为",
+    "type": "object",
+    "items": {
+      "size": {
+        "description": "普通照片默认尺寸",
+        "type": "string",
+        "default": "1536x1024",
+        "hint": "gpt-image-2 常用尺寸：1024x1024、1536x1024、1024x1536；其他尺寸需上游接口支持。"
+      },
+      "selfie_size": {
+        "description": "自拍默认尺寸",
+        "type": "string",
+        "default": "1024x1536"
+      },
+      "max_concurrency": {
+        "description": "并发生图任务上限",
+        "type": "int",
+        "default": 2,
+        "hint": "范围 1～10。超过上限的任务会排队，队列超时后返回繁忙提示。"
+      },
+      "queue_timeout": {
+        "description": "排队等待超时（秒）",
+        "type": "int",
+        "default": 120,
+        "hint": "范围 5～600。"
+      },
+      "max_reference_images": {
+        "description": "单次最多提交参考图数量",
+        "type": "int",
+        "default": 6,
+        "hint": "范围 1～16。实际数量还受接口限制和维度优先级影响。"
+      },
+      "dedupe_window": {
+        "description": "重复请求去重窗口（秒）",
+        "type": "float",
+        "default": 20,
+        "hint": "同一用户、同一描述、同一穿搭与参考图的重复请求会复用结果；0 表示关闭。"
+      },
+      "allow_user_generation": {
+        "description": "允许普通用户生图",
+        "type": "bool",
+        "default": true,
+        "hint": "关闭后仅管理员可以使用生图指令和 LLM 工具。"
+      },
+      "max_result_mb": {
+        "description": "生成图片大小上限（MB）",
+        "type": "int",
+        "default": 30,
+        "hint": "范围 1～100。超过后任务失败且不会写入结果目录。"
+      },
+      "max_prompt_chars": {
+        "description": "提示词最大字符数",
+        "type": "int",
+        "default": 6000,
+        "hint": "范围 1000～12000；超长时优先截断用户画面描述。"
+      },
+      "default_negative": {
+        "description": "附加负面提示词",
+        "type": "text",
+        "default": "",
+        "hint": "会在安全和技术负面词之后追加；用户明确指定画风时会过滤掉冲突的风格负面词。"
+      }
+    }
+  },
+  "timeline": {
+    "description": "时间轴与活动",
+    "type": "object",
+    "items": {
+      "mode": {
+        "description": "时间轴模式",
+        "type": "string",
+        "options": ["auto", "off"],
+        "default": "auto",
+        "hint": "auto 会尝试已配置的适配器，失败时回退本地时段；off 只使用手动/配置活动或本地时段。"
+      },
+      "plugin_name": {
+        "description": "时间轴插件注册名",
+        "type": "string",
+        "default": "",
+        "hint": "仅在你自己安装了兼容适配器时填写；插件不会假设任何特定时间轴插件的名称或 API。"
+      },
+      "function_name": {
+        "description": "适配函数名",
+        "type": "string",
+        "default": "",
+        "hint": "适配函数应无参数返回 dict 或字符串；支持同步或异步。缺失时不影响插件启动。"
+      },
+      "timezone_offset": {
+        "description": "时区偏移（小时）",
+        "type": "int",
+        "default": 8,
+        "hint": "范围 -12～14。"
+      },
+      "southern_hemisphere": {
+        "description": "南半球季节",
+        "type": "bool",
+        "default": false
+      },
+      "manual_activity": {
+        "description": "固定活动",
+        "type": "string",
+        "default": "",
+        "hint": "例如“在家看书”；留空则不虚构活动。"
+      },
+      "manual_location": {
+        "description": "固定地点",
+        "type": "string",
+        "default": ""
+      },
+      "manual_weather": {
+        "description": "固定天气",
+        "type": "string",
+        "default": ""
+      },
+      "manual_temperature": {
+        "description": "固定气温",
+        "type": "string",
+        "default": "",
+        "hint": "支持数字或“5-22”这样的范围。"
+      },
+      "manual_indoor": {
+        "description": "固定室内/室外",
+        "type": "string",
+        "default": "",
+        "hint": "可填 室内、室外、是、否；留空表示未知。"
+      },
+      "manual_season": {
+        "description": "固定季节",
+        "type": "string",
+        "default": "",
+        "hint": "可填 春、夏、秋、冬；留空时按本地时间推断。"
+      }
+    }
+  },
+  "permissions": {
+    "description": "权限",
+    "type": "object",
+    "items": {
+      "admin_ids": {
+        "description": "额外管理员 ID",
+        "type": "list",
+        "default": [],
+        "hint": "填写发送者 ID 或“平台:发送者 ID”；AstrBot 管理员身份始终有效。"
+      }
+    }
+  },
+  "features": {
+    "description": "功能开关",
+    "type": "object",
+    "items": {
+      "on_llm_request_hint": {
+        "description": "向 LLM 注入生图工具使用提示",
+        "type": "bool",
+        "default": true,
+        "hint": "让模型知道何时调用 generate_character_image；普通聊天不会被强制生图。"
+      },
+      "preview_by_default": {
+        "description": "默认只预览不生成",
+        "type": "bool",
+        "default": false,
+        "hint": "开启后需要加 --直接 才会真正调用生图接口。"
+      }
+    }
+  }
+}
