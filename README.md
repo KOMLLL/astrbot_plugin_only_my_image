@@ -396,6 +396,7 @@ data/plugin_data/astrbot_plugin_only_my_image/
 - 不发送 `response_format` 或虚构的 `reference_weight`；
 - b64/URL 响应解析、错误脱敏、接口故障切换和重试边界；
 - 重复请求去重、任务状态、安全拦截、路径穿越拒绝、内网下载地址与恶意重定向拦截；
+- 指令 `GreedyStr` 参数按 AstrBot 真实转换逻辑完整传递，不会被默认值截断；
 - 图库、衣柜、接口配置和穿戴状态在数据库重启后的持久化与用户隔离。
 
 运行方式：
@@ -409,7 +410,7 @@ pytest -q
 当前结果（Python 3.10.11）：
 
 ```text
-40 passed in 1.64s
+41 passed in 1.85s
 All checks passed!
 ```
 

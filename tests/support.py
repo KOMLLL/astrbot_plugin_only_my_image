@@ -236,6 +236,10 @@ class _Star:
         self.config = config or {}
 
 
+class GreedyStr(str):
+    pass
+
+
 FakeContext = _Context
 
 
@@ -272,7 +276,7 @@ def install_astrbot_stubs() -> None:
     core = _make_module("astrbot.core")
     core_star = _make_module("astrbot.core.star")
     core_filter = _make_module("astrbot.core.star.filter")
-    command = _make_module("astrbot.core.star.filter.command", GreedyStr=str)
+    command = _make_module("astrbot.core.star.filter.command", GreedyStr=GreedyStr)
     utils = _make_module("astrbot.core.utils")
     waiter = _make_module(
         "astrbot.core.utils.session_waiter",
