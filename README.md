@@ -1,14 +1,490 @@
-# astrbot-plugin-helloworld
+# 只属于我的形象
 
-AstrBot 插件模板 / A template plugin for AstrBot plugin feature
+`astrbot_plugin_only_my_image` 是一个面向 AstrBot 的角色参考图库、智能衣柜与自然语言生图插件。
 
-> [!NOTE]
-> This repo is just a template of [AstrBot](https://github.com/AstrBotDevs/AstrBot) Plugin.
-> 
-> [AstrBot](https://github.com/AstrBotDevs/AstrBot) is an agentic assistant for both personal and group conversations. It can be deployed across dozens of mainstream instant messaging platforms, including QQ, Telegram, Feishu, DingTalk, Slack, LINE, Discord, Matrix, etc. In addition, it provides a reliable and extensible conversational AI infrastructure for individuals, developers, and teams. Whether you need a personal AI companion, an intelligent customer support agent, an automation assistant, or an enterprise knowledge base, AstrBot enables you to quickly build AI applications directly within your existing messaging workflows.
+它不是简单的“把一句话转发给绘画接口”：插件会先核对时间轴与活动、从衣柜选出符合场景的穿搭、按面部/发型/服装/场景/姿势/构图六个维度挑选参考图，再把真实的参考图文件、穿搭约束、角色设定和安全规则一起提交给 OpenAI 兼容的生图接口，最后把图片和自然的文字回复发回聊天。
 
-# Supports
+- 仓库：<https://github.com/KOMLLL/astrbot_plugin_only_my_image>
+- 许可证：AGPL-3.0
+- 目标运行环境：AstrBot 4.9.2 及以上、Python 3.10+
+- 默认接口：`https://api1.weilai.chat/v1`，默认模型：`gpt-image-2`
 
-- [AstrBot Repo](https://github.com/AstrBotDevs/AstrBot)
-- [AstrBot Plugin Development Docs (Chinese)](https://docs.astrbot.app/dev/star/plugin-new.html)
-- [AstrBot Plugin Development Docs (English)](https://docs.astrbot.app/en/dev/star/plugin-new.html)
+> 请在遵守当地法律、平台规则和他人肖像权的前提下使用。不要用它生成未经同意的真人形象、未成年人性化内容或其他违法内容。
+
+## 功能概览
+
+### 角色参考图库
+
+- 一个角色可以有多张参考图，每张图有自己的名称、备注和标签。
+- 六个可独立配置的维度权重：面部、发型、服装、场景、姿势、构图光影。
+- 权重支持 0～100 的数字，也支持“高 / 中 / 低 / 关”快捷值。
+- 主参考图、启用/停用、重命名、修改备注、删除。
+- 标签统计、按标签搜索、添加/删除/重命名标签。
+- 生成前预览：显示参考图提交顺序、每张图的用途、最终提示词与负面约束。
+- 权重不是装饰：它会参与参考图排序和维度权威选择，写入提示词中的角色说明，并决定实际提交哪些图片。插件不会伪造一个上游 API 根本不存在的 `reference_weight` 参数。
+
+### 智能衣柜
+
+- 内置分类：上装、下装、内搭/打底、外套、鞋履、配饰、头饰、连衣裙/连体装、成套服装。
+- 支持自定义分类。
+- 衣物属性：颜色、材质、季节、适用场景、适温范围、正式度、室内/室外、推荐搭配、禁忌搭配、优先级、关联参考图、备注。
+- 有状态的穿搭：穿上、脱下、换装、还原上一步、按当前活动/季节/天气自动搭配。
+- 成套服装会覆盖上装与下装，同时保留外套、鞋履和配饰。
+- 基础安全层：如果最终穿搭缺少上装或下装，会自动补上“基础白T恤 + 基础黑短裤”；这两件基础衣物自动创建且不能删除。
+- 衣物关联的参考图会被纳入本次参考图选择，并在服装维度获得额外权重。
+
+### 自然语言生图
+
+- 注册真实的 AstrBot LLM 工具 `generate_character_image`，由模型在用户明确要求照片/自拍/换装照时调用。
+- 通过 `on_llm_request` 注入简短提示，明确告诉模型：普通聊天、询问“在干嘛”时不要调用生图工具。
+- 即使用户使用的模型不会调用工具，显式指令 `/生图`、`/自拍` 也始终可用。
+- 支持自拍构图、普通生活抓拍构图、用户指定尺寸/穿搭/场景。
+- 默认对重复请求做短窗口去重，避免同一画面重复计费。
+
+### 时间轴适配
+
+- 不假设任何特定时间轴插件的名称、函数或数据结构。
+- 可通过配置接入一个自定义适配函数；适配器缺失、超时或返回异常时自动回退，不会阻止插件启动。
+- 支持 `/形象 活动 设置` 手动设置活动、地点、天气、温度、季节和室内外状态。
+- 没有可靠信息时不会虚构地点、天气或行程。
+
+### 生图接口管理
+
+- 默认接口由插件配置管理。
+- 管理员可在聊天中添加多个持久化备用接口，设置地址、模型、密钥、优先级、超时和 multipart 图片字段名。
+- 按优先级自动故障切换；只对超时、连接错误、429 和 5xx 做有上限的指数退避重试。
+- 接口测试调用 `GET /models`，不会生成图片，不产生生图费用。
+- 密钥在列表、错误和回复中都会脱敏；日志不会打印完整密钥。
+- 默认禁止下载指向内网/本机的图片 URL，降低 SSRF 风险。
+
+### 稳定性与数据
+
+- 所有网络请求使用异步 `httpx`，没有 `requests` 或阻塞式 sleep。
+- 图片落盘前校验真实文件头、格式、大小和像素规模；路径有目录穿越保护。
+- SQLite 使用 WAL、显式事务和 `PRAGMA user_version`，数据库与图片文件尽量保持一致。
+- 任务有 `pending / running / succeeded / failed` 状态；插件启动时会把异常中断的旧任务标记为失败。
+- 插件卸载时会取消生图任务、关闭 HTTP 客户端和数据库，并结束仍在等待的上传会话。
+
+## 工作流程
+
+```text
+用户明确要求照片 / 自拍 / 换装照
+        │
+        ├─ LLM 工具意图判断 ── 普通聊天不触发生图
+        │
+        ▼
+读取角色设定与时间轴
+        │
+        ▼
+智能衣柜：显式穿搭 → 当前穿搭 → 按活动/季节/天气自动搭配
+        │
+        ▼
+按六维权重挑选参考图（主图、标签、描述、场景、衣物关联）
+        │
+        ▼
+构建提示词 + 负面约束 + 安全检查
+        │
+        ▼
+POST /images/edits（有参考图，multipart 提交真实图片）
+或 POST /images/generations（无参考图）
+        │
+        ▼
+校验返回图片 → 原子写盘 → 记录任务 → 发送图片与自然回复
+```
+
+## 安装
+
+1. 确认 AstrBot 版本不低于 4.9.2，运行 Python 3.10+。
+2. 把本仓库放到 AstrBot 的插件目录，例如：
+
+   ```bash
+   cd AstrBot/data/plugins
+   git clone https://github.com/KOMLLL/astrbot_plugin_only_my_image.git
+   ```
+
+3. 在 AstrBot 使用的 Python 环境中安装依赖：
+
+   ```bash
+   pip install -r astrbot_plugin_only_my_image/requirements.txt
+   ```
+
+4. 重启 AstrBot，或在 WebUI 插件管理页重新加载插件。
+5. 打开插件配置，至少填写 `api.api_key`。接口地址和模型已有默认值，可按你的供应商修改。
+6. 在聊天中发送 `/生图帮助` 或 `/形象 状态` 验证插件是否正常加载。
+
+### 第一次使用建议
+
+1. 用 `/添加参考图 主参考|日常正脸|正面,白色T恤` 上传一张或多张参考图。
+2. 用 `/图库 权重 主参考 面部=高 发型=60 服装=中` 调整权重。
+3. 用 `/衣柜 添加 白色衬衫 上装 颜色=白色 季节=春,秋 场景=工作,约会 优先级=80` 添加衣物。
+4. 发送 `/预览生图 周末在咖啡店门口自拍` 查看时间轴、穿搭、参考图和提示词。
+5. 确认无误后发送 `/生图 周末在咖啡店门口自拍`。
+
+## 配置说明
+
+配置文件由 AstrBot 保存为 `data/config/astrbot_plugin_only_my_image_config.json`，WebUI 中的字段来自插件根目录的 `_conf_schema.json`。
+
+### `api`
+
+| 配置项 | 默认值 | 说明 |
+| --- | --- | --- |
+| `enabled` | `true` | 是否启用配置中的默认接口 |
+| `base_url` | `https://api1.weilai.chat/v1` | OpenAI 兼容接口地址 |
+| `model` | `gpt-image-2` | 模型名称 |
+| `api_key` | 空 | API Key；WebUI 中按敏感字段处理 |
+| `timeout` | `180` | 单次请求超时秒数，范围 10～600 |
+| `max_retries` | `2` | 可重试错误的最大重试次数，范围 0～5 |
+| `require_reference` | `false` | 为真时没有可用参考图就拒绝生成 |
+| `quality` | `auto` | `auto / low / medium / high` |
+| `output_format` | `png` | `png / jpeg / webp` |
+| `edit_field` | `image[]` | 参考图 multipart 字段名 |
+| `allow_private_download_urls` | `false` | 是否允许下载私网图片 URL，默认关闭以防 SSRF |
+
+接口地址会自动拼接路径。例如：
+
+- `https://example.com/v1` → `https://example.com/v1/images/generations`
+- `https://example.com/v1/images` → `https://example.com/v1/images/edits`
+- `https://example.com` → `https://example.com/v1/images/generations`
+
+插件不会发送 `response_format`，也不会发送虚构的 `reference_weight`。参考图通过 multipart 的 `image[]`（可配置）真实提交。
+
+### `character`
+
+- `name`：角色名称，用于提示词和回复。
+- `persona`：角色设定，只影响气质、表情和表达方式，不覆盖安全规则。
+- `style`：默认画面风格。用户明确要求二次元、插画等风格时，会保留用户风格并过滤掉冲突的风格负面词。
+
+### `gallery`
+
+- `allow_user_upload`：普通用户能否修改自己的图库。
+- `max_images_per_scope`、`max_image_mb`、`allowed_formats`。
+- `upload_timeout`、`upload_max_images`：连续上传会话的超时与单次上限。
+
+### `wardrobe`
+
+- `allow_user_edit`：普通用户能否修改自己的衣柜。
+- `max_items`：每个数据空间的衣物上限。
+
+### `generation`
+
+- `size`、`selfie_size`：普通照片和自拍的默认尺寸。`gpt-image-2` 常用尺寸为 `1024x1024`、`1536x1024`、`1024x1536`；其他尺寸需上游支持。
+- `max_concurrency`、`queue_timeout`：并发与排队控制。
+- `max_reference_images`：单次最多提交参考图数量，范围 1～16。
+- `dedupe_window`：重复请求去重窗口，0 表示关闭。
+- `allow_user_generation`：普通用户是否可以使用生图。
+- `max_result_mb`、`max_prompt_chars`、`default_negative`。
+
+### `timeline`
+
+- `mode`：`auto` 会尝试适配器并在失败时回退；`off` 只使用手动/配置活动或本地时段。
+- `plugin_name`、`function_name`：自定义适配器。插件不知道也不需要知道某个具体时间轴插件的 API。
+- `timezone_offset`、`southern_hemisphere`。
+- `manual_activity / manual_location / manual_weather / manual_temperature / manual_indoor / manual_season`：固定时间轴。
+
+### `permissions` 与 `features`
+
+- `admin_ids`：额外管理员 ID，可填写发送者 ID 或“平台:发送者 ID”。
+- `on_llm_request_hint`：是否向 LLM 注入工具使用提示。
+- `preview_by_default`：默认只预览不生成；开启后需要加 `--直接` 才会真正调用接口。
+
+## 指令
+
+### 生图
+
+```text
+/生图 <描述> [--尺寸 1024x1024] [--穿搭 白色连衣裙] [--场景 咖啡店] [--预览] [--直接]
+/自拍 <描述>
+/预览生图 <描述>
+```
+
+别名：`/画图`、`/出图`、`/拍照`、`/自拍照`、`/生图预览`。
+
+- 不写描述时会使用一个自然的日常自拍/人像描述。
+- `--预览` 只展示时间轴、穿搭、参考图、提示词和负面约束，不调用接口。
+- 开启 `preview_by_default` 后，默认只预览；`--直接` 强制生成。
+
+### 参考图库
+
+```text
+/图库
+/图库 列表
+/图库 搜索 <关键词>
+/图库 详情 <名称或ID>
+/图库 添加 [名称|备注|标签1,标签2]
+/添加参考图 [名称|备注|标签1,标签2]
+/图库 权重 <名称或ID> [面部=高 发型=60 服装=低 场景=关 ...] [重置]
+/图库 主图 <名称或ID>
+/图库 启用 <名称或ID>
+/图库 停用 <名称或ID>
+/图库 重命名 <名称或ID> <新名称>
+/图库 说明 <名称或ID> <新备注>
+/图库 标签
+/图库 标签 添加 <名称或ID> <标签...>
+/图库 标签 删除 <标签>
+/图库 标签 重命名 <旧标签> <新标签>
+/图库 删除 <名称或ID> --确认
+```
+
+- `添加` 会进入连续上传会话：直接发图片，发送“完成”结束，发送“取消”放弃；发送“名称|备注|标签”可以为后续图片设置说明。
+- 管理员加 `--共享` 可以查看和管理共享图库。
+- 权重维度支持：面部、发型、服装、场景、姿势、构图光影。也支持英文别名 `face / hair / outfit / scene / pose / composition`。
+
+### 衣柜
+
+```text
+/衣柜
+/衣柜 列表 [分类] [--全部]
+/衣柜 添加 <名称> <分类> [颜色=... 材质=... 季节=春,秋 场景=约会,逛街
+                         温度=5-22 正式度=1-5 场合=室内 推荐=... 禁忌=...
+                         优先级=80 参考图=<名称或ID> 备注=...]
+/衣柜 启用 <名称或ID>
+/衣柜 停用 <名称或ID>
+/衣柜 删除 <名称或ID> --确认
+/衣柜 穿上 <衣物...>
+/衣柜 脱下 <衣物或分类>
+/衣柜 换 <分类> <衣物>
+/衣柜 还原
+/衣柜 自动搭配 [场景关键词]
+/衣柜 分类 [列表]
+/衣柜 分类 添加 <名称> [类型=other]
+/衣柜 分类 删除 <名称> --确认
+/衣柜 套装 [列表]
+/衣柜 套装 添加 <名称> <衣物...>
+/衣柜 套装 删除 <名称> --确认
+/衣柜 套装 穿上 <名称>
+```
+
+- 管理员加 `--共享` 可以管理共享衣柜。
+- 正式度范围 1～5；优先级越高越容易被自动搭配选中。
+- 推荐/禁忌搭配使用逗号分隔的衣物名称或标签。
+- 自动搭配会综合考虑活动、季节、温度、室内外、场景、正式度、优先级、推荐/禁忌关系。
+- 无论自动搭配还是显式穿搭，最终缺少上装/下装都会回退到基础白T恤 + 黑色短裤。
+
+### 形象、时间轴与状态
+
+```text
+/形象
+/形象 活动
+/形象 活动 设置 <活动> [地点=... 天气=... 温度=... 室内=是 季节=秋]
+/形象 活动 清除
+/形象 状态
+/形象 帮助
+/生图帮助
+```
+
+`/形象 状态` 会显示数据层、参考图、衣物、接口、API Key 是否配置、LLM 工具注册状态和最近任务。管理员还会看到数据目录和启动错误。
+
+### 接口管理（仅管理员）
+
+```text
+/接口
+/接口 测试 [名称或ID]
+/接口 添加 <名称> 地址=https://example.com/v1 模型=gpt-image-2 密钥=sk-xxx [优先级=100] [超时=180] [字段=image[]]
+/接口 修改 <名称或ID> [地址=... 模型=... 密钥=... 优先级=... 超时=... 字段=...]
+/接口 启用 <名称或ID>
+/接口 停用 <名称或ID>
+/接口 删除 <名称或ID> --确认
+/接口 错误
+```
+
+- 不写名称时，`测试` 使用默认接口。
+- `测试` 只访问模型列表，不生成图片。
+- 回复只会显示脱敏后的密钥，不会回显完整密钥。
+
+## 参考图权重的真实作用
+
+六个维度分别是：
+
+| 维度 | 说明 | 默认权重 |
+| --- | --- | --- |
+| 面部 `face` | 五官、脸型、妆容 | 80 |
+| 发型 `hair` | 发型、发色、发长 | 60 |
+| 服装 `outfit` | 款式、颜色、材质 | 60 |
+| 场景 `scene` | 环境氛围与场景元素 | 45 |
+| 姿势 `pose` | 姿势与肢体语言 | 40 |
+| 构图 `composition` | 构图、镜头、光线 | 40 |
+
+权重会按以下方式生效：
+
+1. 计算每张图在每个维度的得分（权重、主图加成、自拍偏好、关键词/标签匹配、描述匹配、场景匹配、衣物关联加成）。
+2. 为每个维度选出当前最合适的权威参考图。
+3. 决定最多 N 张参考图的提交顺序（面部权威 → 主图 → 衣物关联 → 其他维度权威 → 总分排序）。
+4. 在提示词中写入“图1负责面部、图2负责服装”等具体角色说明。
+5. 如果用户说“不要参考脸/只看衣服”，对应维度的角色说明会降级，但图片仍可能作为辅助参考提交。
+6. 如果某张图的权重为 0，它不会成为该维度的权威参考。
+
+这些权重最终影响“提交哪些真实图片”和“让模型怎么使用这些图片”，不会作为不存在的厂商参数发送。
+
+## 安全设计
+
+- 描述在进入提示词前会经过安全检查，拦截裸露、脱衣、下空、露胸/露臀等绕过衣着规则的表达。
+- 即使用户描述试图绕过，最终穿搭缺少上装或下装时仍会回退到基础白T恤 + 黑色短裤。
+- 负面提示词包含安全约束和常见技术缺陷约束。
+- 用户明确指定二次元/插画风格时，会过滤掉与风格冲突的负面词，避免默认负面词把用户风格强行拉回摄影。
+- 插件会尽力拦截明显的不安全请求，但它不是内容审核模型；上游接口也可能拒绝请求或返回错误。请勿尝试绕过安全规则。
+
+## 时间轴适配器
+
+时间轴是可选能力，插件不会硬依赖任何特定插件。配置示例：
+
+```json
+{
+  "timeline": {
+    "mode": "auto",
+    "plugin_name": "your_timeline_plugin_registry_name",
+    "function_name": "get_current_activity"
+  }
+}
+```
+
+适配函数需要：
+
+- 无参数调用；
+- 返回 `dict`、字符串，或可等待的同类结果；
+- 3 秒内完成，超时会回退；
+- 不要求插件修改本项目的代码。
+
+支持的字典键包括：
+
+- 活动：`activity`、`current_activity`、`doing`、`task`
+- 地点：`location`、`place`、`where`
+- 天气：`weather`、`condition`
+- 温度：`temperature`、`temp`
+- 室内外：`indoor`、`is_indoor`
+- 季节：`season`
+- 时段：`time_label`
+
+如果适配器不存在、未加载、超时、抛异常或返回空值，插件会使用手动设置或本地时段，并明确标注“不虚构地点与天气”。适配器缺失不会阻止插件启动。
+
+## 数据与隐私
+
+运行数据保存在：
+
+```text
+data/plugin_data/astrbot_plugin_only_my_image/
+├── only_my_image.sqlite3
+├── references/
+│   ├── u_<用户哈希>/
+│   └── shared/
+└── generated/
+    ├── u_<用户哈希>/
+    └── shared/
+```
+
+- 数据库使用 SQLite WAL，当前 schema 版本为 1。
+- 图片使用随机 ID 命名，不把原始文件名直接暴露到文件系统。
+- 参考图库、衣柜和生成结果不会写入插件源码目录，也不会被提交到 Git。
+- 参考图只会在实际生成时提交给配置的生图接口；请确认你信任该接口的运营方。
+- 个人数据空间通过“平台:发送者 ID”的哈希隔离；共享空间仅管理员可写。
+- 备份时建议先停止 AstrBot，再复制整个数据目录，避免复制到未落盘的 WAL 状态。
+
+## 权限模型
+
+- AstrBot 管理员身份，或配置在 `permissions.admin_ids` 中的发送者 ID。
+- 普通用户默认只能操作自己的个人图库和个人衣柜；共享空间只有管理员可以写入。
+- `gallery.allow_user_upload=false` 或 `wardrobe.allow_user_edit=false` 可以关闭普通用户的修改权限，但不会影响管理员。
+- `generation.allow_user_generation=false` 可以关闭普通用户的生图权限。
+- 接口管理始终仅限管理员。
+
+## 测试与验证
+
+自动化测试使用 `httpx.MockTransport` 模拟生图接口，默认不会产生真实费用。覆盖重点包括：
+
+- 参考图保存、查找、权重、主图、标签和删除；
+- 衣柜基础层、穿戴状态、换装、自动搭配和关联参考图；
+- 权重决定实际入选并提交的参考图字节、正确的鉴权头和接口路径；
+- 不发送 `response_format` 或虚构的 `reference_weight`；
+- b64/URL 响应解析、错误脱敏、接口故障切换和重试边界；
+- 重复请求去重、任务状态、安全拦截、路径穿越拒绝、内网下载地址与恶意重定向拦截；
+- 图库、衣柜、接口配置和穿戴状态在数据库重启后的持久化与用户隔离。
+
+运行方式：
+
+```bash
+pip install -r requirements-dev.txt
+ruff check main.py services tests
+pytest -q
+```
+
+当前结果（Python 3.10.11）：
+
+```text
+40 passed in 1.64s
+All checks passed!
+```
+
+> 测试环境的验证边界：没有配置真实 API Key，也没有正在运行的 AstrBot 实例，因此所有接口调用均由 `httpx.MockTransport` 模拟，未对任何真实供应商完成端到端生图验证；普通自然语言的生图意图目前只通过 LLM 工具注册、工具说明和 `on_llm_request` 提示词契约进行自动化验证，未使用真实大模型做意图识别；真实平台图片上传、按钮/命令兼容性和消息发送效果也未在线上实例中实测。首次接入真实接口时，请先用 `/接口 测试` 检查鉴权和模型列表，再发送一次低成本的测试请求，避免无节制重复调用。
+
+## 项目结构
+
+```text
+astrbot_plugin_only_my_image/
+├── main.py                 # AstrBot 插件入口、指令、LLM 工具与上传会话
+├── metadata.yaml           # 插件元数据
+├── _conf_schema.json       # WebUI 配置 schema
+├── requirements.txt        # 运行依赖
+├── requirements-dev.txt    # 开发/测试依赖
+├── services/
+│   ├── errors.py
+│   ├── models.py
+│   ├── utils.py
+│   ├── log.py              # 统一使用 AstrBot logger
+│   ├── settings.py
+│   ├── storage.py          # SQLite 持久化
+│   ├── gallery.py          # 参考图库
+│   ├── wardrobe.py         # 智能衣柜
+│   ├── timeline.py         # 时间轴与回退
+│   ├── reference_selector.py
+│   ├── prompt_builder.py
+│   ├── image_api.py        # OpenAI 兼容接口适配与故障切换
+│   └── generator.py        # 生图协调器
+├── tests/                  # pytest + httpx.MockTransport
+├── pytest.ini
+├── requirements.txt
+├── requirements-dev.txt
+└── README.md
+```
+
+## 常见问题
+
+### 为什么我说“在干嘛”没有生成图片？
+
+这是预期行为。自然语言生图只在用户明确要求照片、自拍、换装照或“拍/画一张”时触发。普通聊天不会调用生图工具。显式指令始终可用。
+
+### 提示“没有启用任何生图接口”怎么办？
+
+检查 `api.enabled`、`api.api_key` 和 `/接口` 列表；如果要使用备用接口，确认它已启用且优先级正确。
+
+### `/接口 测试` 失败但生图也许可用？
+
+`测试` 调用的是 `GET /models`。有些兼容服务不实现模型列表，但实现了图片接口；此时测试失败不一定代表生图不可用。可以先检查地址是否以 `/v1` 结尾，再用一次低成本请求验证。
+
+### 接口返回 404？
+
+通常是 `base_url` 拼接问题。推荐填写 `https://你的域名/v1`，插件会拼接 `/images/generations` 或 `/images/edits`。不要填写完整图片接口路径，除非你确认供应商的路径规则。
+
+### 没有参考图还能生成吗？
+
+可以，默认会退化为纯文生图。开启 `api.require_reference` 后会拒绝没有参考图的请求。
+
+### 图片没有显示在聊天里？
+
+插件使用 AstrBot 的本地图片消息组件。不同平台对图片发送的支持不同；如果平台不支持，文字回复仍会发送。请检查 AstrBot 日志和平台适配器能力。
+
+### 时间轴插件没装会报错吗？
+
+不会。缺少适配器只会使用手动设置或本地时段，并在预览/状态中标注来源。
+
+## 开发约定
+
+- 目标 Python 3.10，异步优先。
+- 网络请求使用 `httpx.AsyncClient`。
+- 插件入口使用 `from astrbot.api import logger` 和 `from astrbot.api.event import filter`。
+- 持久化只使用 `StarTools.get_data_dir()` 返回的数据目录。
+- `on_llm_request` 不通过 `yield` 发消息。
+- LLM 工具方法不与 `permission_type` 叠加。
+- 提交前运行 `ruff check` 和 `pytest`。
+
+## 许可证
+
+本项目使用 GNU Affero General Public License v3.0，详见 [LICENSE](LICENSE)。
