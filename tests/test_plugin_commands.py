@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import inspect
+
 import httpx
+from astrbot.core.star.filter.command import GreedyStr
 
 from tests.support import (
     ProviderRequest,
@@ -172,6 +175,55 @@ async def test_management_commands_work_without_buttons(plugin_factory, event_fa
 
     status = await plugin._handle_profile(admin, "状态")
     assert "插件状态：正常运行" in status
+
+
+def _astrbot_parse_params(handler, message: str) -> dict[str, object]:
+    """复刻 AstrBot CommandFilter 的参数转换，防止默认值把 GreedyStr 降级成普通字符串。"""
+
+    signature = inspect.signature(handler, eval_str=True)
+    specs: dict[str, object] = {}
+    index = 0
+    for name, param in signature.parameters.items():
+        if index < 2:
+            index += 1
+            continue
+        specs[name] = (
+            param.annotation if param.default is inspect.Parameter.empty else param.default
+        )
+    tokens = [token for token in message.split(" ") if token]
+    converted: dict[str, object] = {}
+    items = list(specs.items())
+    for position, (name, spec) in enumerate(items):
+        if spec is GreedyStr:
+            converted[name] = " ".join(tokens[position:])
+            break
+        if position >= len(tokens):
+            converted[name] = spec
+        else:
+            converted[name] = tokens[position]
+    return converted
+
+
+async def test_greedy_command_parameters_receive_full_text(plugin_factory, event_factory):
+    plugin = await plugin_factory()
+    for name, handler in inspect.getmembers(type(plugin), inspect.isfunction):
+        if not hasattr(handler, "_astrbot_command_name"):
+            continue
+        signature = inspect.signature(handler, eval_str=True)
+        for param_name, param in list(signature.parameters.items())[2:]:
+            if param.annotation is GreedyStr:
+                assert param.default is inspect.Parameter.empty, (
+                    f"{name}.{param_name} 带默认值会被 AstrBot 当成普通字符串，"
+                    "只接收第一个词"
+                )
+
+    message = "添加 白色衬衫 上装 颜色=白色 季节=春,秋 场景=工作,约会 优先级=80"
+    parsed = _astrbot_parse_params(type(plugin).wardrobe_command, message)
+    assert parsed["text"] == message
+
+    user = event_factory(sender="alice", origin="test:private:alice")
+    result = await plugin._handle_wardrobe(user, str(parsed["text"]))
+    assert "已添加衣物《白色衬衫》" in result
 
 
 async def test_missing_timeline_adapter_does_not_block_plugin_or_generation(

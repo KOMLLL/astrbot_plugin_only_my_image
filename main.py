@@ -548,17 +548,17 @@ class OnlyMyImagePlugin(Star):
     # ---------- generation commands ----------
 
     @filter.command("生图", alias={"画图", "出图", "拍照"})
-    async def generate_command(self, event: AstrMessageEvent, text: GreedyStr = ""):
+    async def generate_command(self, event: AstrMessageEvent, text: GreedyStr):
         """根据描述生成一张角色照片。"""
         yield await self._generate_reply(event, str(text), selfie=False, preview_only=False)
 
     @filter.command("自拍", alias={"自拍照"})
-    async def selfie_command(self, event: AstrMessageEvent, text: GreedyStr = ""):
+    async def selfie_command(self, event: AstrMessageEvent, text: GreedyStr):
         """根据描述生成一张角色自拍。"""
         yield await self._generate_reply(event, str(text), selfie=True, preview_only=False)
 
     @filter.command("预览生图", alias={"生图预览"})
-    async def preview_command(self, event: AstrMessageEvent, text: GreedyStr = ""):
+    async def preview_command(self, event: AstrMessageEvent, text: GreedyStr):
         """预览生成参数，不调用图片接口。"""
         yield await self._generate_reply(event, str(text), selfie=False, preview_only=True)
 
@@ -620,7 +620,7 @@ class OnlyMyImagePlugin(Star):
     # ---------- gallery ----------
 
     @filter.command("图库", alias={"参考图"})
-    async def gallery_command(self, event: AstrMessageEvent, text: GreedyStr = ""):
+    async def gallery_command(self, event: AstrMessageEvent, text: GreedyStr):
         """管理角色参考图库。"""
         problem = self._startup_problem()
         if problem:
@@ -635,7 +635,7 @@ class OnlyMyImagePlugin(Star):
         yield event.plain_result(result)
 
     @filter.command("添加参考图", alias={"上传参考图"})
-    async def add_reference_command(self, event: AstrMessageEvent, text: GreedyStr = ""):
+    async def add_reference_command(self, event: AstrMessageEvent, text: GreedyStr):
         """连续上传角色参考图。"""
         problem = self._startup_problem()
         if problem:
@@ -1054,7 +1054,7 @@ class OnlyMyImagePlugin(Star):
     # ---------- wardrobe ----------
 
     @filter.command("衣柜")
-    async def wardrobe_command(self, event: AstrMessageEvent, text: GreedyStr = ""):
+    async def wardrobe_command(self, event: AstrMessageEvent, text: GreedyStr):
         """管理智能衣柜与当前穿搭。"""
         problem = self._startup_problem()
         if problem:
@@ -1537,7 +1537,7 @@ class OnlyMyImagePlugin(Star):
     # ---------- API management ----------
 
     @filter.command("接口", alias={"生图接口"})
-    async def api_command(self, event: AstrMessageEvent, text: GreedyStr = ""):
+    async def api_command(self, event: AstrMessageEvent, text: GreedyStr):
         """管理生图接口（仅管理员）。"""
         problem = self._startup_problem()
         if problem:
@@ -1699,7 +1699,7 @@ class OnlyMyImagePlugin(Star):
     # ---------- character / timeline ----------
 
     @filter.command("形象", alias={"角色"})
-    async def image_profile_command(self, event: AstrMessageEvent, text: GreedyStr = ""):
+    async def image_profile_command(self, event: AstrMessageEvent, text: GreedyStr):
         """查看形象、时间轴与插件运行状态。"""
         problem = self._startup_problem()
         if problem:
